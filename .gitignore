@@ -1,0 +1,9 @@
+node_modules/
+data/*.sqlite3*
+data/shield_store.json
+.build/
+.swiftpm/
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+.DS_Store
+.env

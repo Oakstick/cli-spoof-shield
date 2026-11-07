@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Spoof Shield — iOS CallKit & On-Device VoIP Defense Workbench</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --panel: #131b2e;
+      --panel-alt: #19233c;
+      --border: #263554;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }
+    header {
+      background: rgba(19, 27, 46, 0.92);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(10px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-weight: 600;
+    }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+    }
+    button.primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border-color: #38bdf8;
+      color: #fff;
+    }
+    button.primary:hover {
+      filter: brightness(1.1);
+    }
+    .layout {
+      max-width: 1400px;
+      margin: 24px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 370px 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 1024px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    /* iPhone CallKit Lock-Screen Simulator */
+    .iphone-frame {
+      background: linear-gradient(165deg, #1a2138 0%, #090d16 100%);
+      border: 4px solid #334155;
+      border-radius: 42px;
+      padding: 22px 20px 28px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 670px;
+      position: relative;
+    }
+    .dynamic-island {
+      width: 120px;
+      height: 26px;
+      background: #000;
+      border-radius: 20px;
+      margin: 0 auto 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 0.68rem;
+      color: #94a3b8;
+    }
+    .call-screen-top {
+      text-align: center;
+      margin-top: 10px;
+    }
+    .call-status-pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .status-block { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+    .status-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+    .status-allow { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
+
+    .caller-number {
+      font-size: 1.65rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    .callkit-banner {
+      margin: 12px 4px;
+      padding: 12px;
+      border-radius: 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-align: left;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+    }
+    .telemetry-chips {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+      text-align: left;
+    }
+    .chip {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .chip-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; }
+    .chip-val { font-size: 0.82rem; font-weight: 700; margin-top: 2px; }
+
+    .score-meter {
+      margin: 18px 0;
+      background: rgba(15, 23, 42, 0.75);
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .score-bar-bg {
+      height: 8px;
+      background: #1e293b;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .score-bar-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.35s ease;
+    }
+    .call-buttons {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 20px;
+      padding-top: 12px;
+    }
+    .circle-btn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border: none;
+      color: #fff;
+    }
+    .btn-decline { background: #ef4444; }
+    .btn-accept { background: #10b981; }
+
+    /* Right Workbench Panels */
+    .main-col {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card p.sub {
+      font-size: 0.84rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .presets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .preset-btn {
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .preset-btn span.title { font-size: 0.84rem; font-weight: 700; color: #f8fafc; }
+    .preset-btn span.desc { font-size: 0.73rem; color: var(--muted); font-weight: 400; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    input, select {
+      width: 100%;
+      padding: 9px 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: var(--text);
+      font-size: 0.875rem;
+    }
+    .signals-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .signal-item {
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--panel-alt);
+      border-left: 4px solid var(--accent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.84rem;
+    }
+    .signal-delta {
+      font-weight: 700;
+      font-size: 0.82rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .delta-pos { background: rgba(239, 68, 68, 0.18); color: #f87171; }
+    .delta-neg { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+
+    .toggles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .toggle-row {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+      margin-top: 10px;
+    }
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; }
+
+    /* Setup Drawer Modal */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      display: none;
+      justify-content: flex-end;
+      z-index: 50;
+    }
+    .drawer-backdrop.open { display: flex; }
+    .drawer {
+      width: 460px;
+      max-width: 100%;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .code-box {
+      background: #090d16;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 0.78rem;
+      word-break: break-all;
+      color: #38bdf8;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span style="font-size: 1.5rem;">🛡️</span>
+      <div>
+        <h1>CLI Spoof Shield — Device-Side VoIP & CallKit Defense</h1>
+        <span style="font-size: 0.78rem; color: var(--muted);">iOS CallDirectoryExtension + LiveCallerIDLookup (PIR) + STIR/SHAKEN + Line-Type Engine</span>
+      </div>
+      <span class="badge" id="providerBadge">Mode: Offline Heuristic DB</span>
+    </div>
+    <div class="header-actions">
+      <button onclick="toggleSetupDrawer(true)">⚙️ Setup Assistant & API Keys</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Left Column: Live iPhone CallKit & LiveCallerIDLookup Lock Screen Simulator -->
+    <aside class="iphone-frame">
+      <div>
+        <div class="dynamic-island">
+          <span>🔒 iOS CallKit</span>
+          <span id="simActionTiny">SCREENING</span>
+        </div>
+
+        <div class="call-screen-top">
+          <div id="simStatusPill" class="call-status-pill status-block">🛑 BLOCKED BY CALLKIT</div>
+          <div class="caller-number" id="simCallerNumber">+1 (800) 935-9935</div>
+          <div style="font-size: 0.82rem; color: var(--muted);" id="simCarrierSub">NANP Toll-Free RespOrg • US</div>
+        </div>
+
+        <div class="callkit-banner" id="simCallKitLabel">
+          🛑 BLOCKED: Spoofed Chase Fraud Department CLI
+        </div>
+
+        <div class="score-meter">
+          <div style="display:flex; justify-content:space-between; font-size:0.78rem; font-weight:700;">
+            <span>SPOOF & VOIP RISK SCORE</span>
+            <span id="simRiskScoreText">85 / 100</span>
+          </div>
+          <div class="score-bar-bg">
+            <div id="simRiskBar" class="score-bar-fill" style="width: 85%; background: #ef4444;"></div>
+          </div>
+        </div>
+
+        <div class="telemetry-chips">
+          <div class="chip">
+            <div class="chip-label">STIR/SHAKEN Verstat</div>
+            <div class="chip-val" id="simAttestation">Level C (Gateway)</div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Carrier Line Type</div>
+            <div class="chip-val" id="simLineType">nonFixedVoip</div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">iOS Extension Path</div>
+            <div class="chip-val" id="simExtensionPath">CallDirectory + PIR</div>
+          </div>
+          <div class="chip">
+            <div class="chip-label">Intel Source</div>
+            <div class="chip-val" id="simLookupSource">offline_heuristic_db</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div id="simBlockedOverlayNote" style="text-align:center; font-size:0.76rem; color:#f87171; background:rgba(239,68,68,0.12); padding:8px; border-radius:10px; border:1px solid rgba(239,68,68,0.3);">
+          Silenced & terminated before ringing via CXCallDirectoryProvider / LiveCallerIDLookup
+        </div>
+        <div class="call-buttons">
+          <button class="circle-btn btn-decline" onclick="runEvaluation()">✕<span>Decline</span></button>
+          <button class="circle-btn btn-accept" onclick="runEvaluation()">✓<span>Inspect</span></button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Column: Interactive Attack Simulator, 5-Layer Breakdown, Policy Toggles & CallKit Table -->
+    <main class="main-col">
+
+      <!-- Card 1: Spoof Scenario Simulator -->
+      <section class="card">
+        <h2>
+          <span>1. Incoming Call Spoof & VoIP Attack Simulator</span>
+          <button class="primary" onclick="runEvaluation()">⚡ Screen Incoming Call Now</button>
+        </h2>
+        <p class="sub">Select a real-world CLI spoofing scenario or enter custom SIP/STIR-SHAKEN telemetry to test the 5-layer device-side engine.</p>
+
+        <div class="presets-grid">
+          <button class="preset-btn" onclick="loadPreset('bankSpoof')">
+            <span class="title">🏦 Bank Helpline Spoof</span>
+            <span class="desc">Chase +1-800-935-9935 via Gateway C trunk</span>
+          </button>
+          <button class="preset-btn" onclick="loadPreset('neighborSpoof')">
+            <span class="title">📍 Neighbor Spoof (NPA-NXX)</span>
+            <span class="desc">Forges your own +1-415-555-XXXX prefix</span>
+          </button>
+          <button class="preset-btn" onclick="loadPreset('burnerVoip')">
+            <span class="title">🔥 Rogue Non-Fixed VoIP</span>
+            <span class="desc">Burner wholesale SIP DID (+1-302-555-0199)</span>
+          </button>
+          <button class="preset-btn" onclick="loadPreset('sipMismatch')">
+            <span class="title">🎭 SIP From vs PAI Mismatch</span>
+            <span class="desc">Display CLI differs from network PAI header</span>
+          </button>
+          <button class="preset-btn" onclick="loadPreset('verifiedLegit')">
+            <span class="title">✅ Verified Legitimate Call</span>
+            <span class="desc">Level-A Attested MNO call from saved contact</span>
+          </button>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="inputNumber">Caller ID (CLI / E.164)</label>
+            <input id="inputNumber" type="text" value="+1 (800) 935-9935" />
+          </div>
+          <div>
+            <label for="inputAttestation">STIR/SHAKEN Attestation</label>
+            <select id="inputAttestation">
+              <option value="A">Level A — Full Attestation (Verified DID Owner)</option>
+              <option value="B">Level B — Partial (Known Customer, Unverified DID)</option>
+              <option value="C" selected>Level C — Gateway (International / No Verification)</option>
+              <option value="NONE">NONE — No STIR/SHAKEN Token (No-TN-Validation)</option>
+              <option value="FAILED">FAILED — Invalid Signature (TN-Validation-Failed)</option>
+            </select>
+          </div>
+          <div>
+            <label for="inputLineType">Carrier Line-Type Override</label>
+            <select id="inputLineType">
+              <option value="auto" selected>Auto-Detect (Twilio / Numverify / Offline DB)</option>
+              <option value="nonFixedVoip">nonFixedVoip (Burner / Virtual SIP Trunk)</option>
+              <option value="fixedVoip">fixedVoip (Enterprise / Residential VoIP)</option>
+              <option value="tollFree">tollFree (Inbound Toll-Free CLI)</option>
+              <option value="mobile">mobile (Physical MNO SIM)</option>
+              <option value="landline">landline (Physical PSTN Landline)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label for="inputFromURI">SIP 'From' Header (Optional)</label>
+            <input id="inputFromURI" type="text" placeholder="sip:+18009359935@chase.com" value="sip:+18009359935@chase.com" />
+          </div>
+          <div>
+            <label for="inputPAI">SIP 'P-Asserted-Identity' (Optional)</label>
+            <input id="inputPAI" type="text" placeholder="sip:+13025550199@wholesale-voip.io" value="sip:+13025550199@wholesale-voip.io" />
+          </div>
+        </div>
+
+        <h3 style="font-size: 0.82rem; text-transform: uppercase; color: var(--muted); margin-top: 12px;">5-Layer Detection Breakdown</h3>
+        <div id="signalsContainer" class="signals-list"></div>
+      </section>
+
+      <!-- Card 2: On-Device Policy Configuration -->
+      <section class="card">
+        <h2>
+          <span>2. Device-Side Defense Policies (Synced to iOS CallKit & PIR)</span>
+          <span style="font-size: 0.76rem; color: var(--accent);">Your Device SIM E.164: +<span id="ownNumberDisplay">14155550100</span></span>
+        </h2>
+        <p class="sub">Toggling any rule immediately recompiles the strictly ascending Int64 table for <code>CXCallDirectoryProvider</code>.</p>
+
+        <div class="toggles-grid">
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem;">Disable Non-Fixed (Burner) VoIP</div>
+              <div style="font-size: 0.75rem; color: var(--muted);">Auto-blocks virtual/wholesale VoIP numbers lacking Level-A attestation</div>
+            </div>
+            <input type="checkbox" id="chkBlockVoip" checked onchange="savePolicy()" />
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem;">Block Failed STIR/SHAKEN</div>
+              <div style="font-size: 0.75rem; color: var(--muted);">Drops calls with <code>TN-Validation-Failed</code> or forged PASSporT claims</div>
+            </div>
+            <input type="checkbox" id="chkBlockStir" checked onchange="savePolicy()" />
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem;">Neighbor Spoof NPA-NXX Shield</div>
+              <div style="font-size: 0.75rem; color: var(--muted);">Flags all 9,998 non-contact numbers sharing your +1-415-555 prefix</div>
+            </div>
+            <input type="checkbox" id="chkNeighborShield" checked onchange="savePolicy()" />
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem;">Protected Institution De-Aliasing Vault</div>
+              <div style="font-size: 0.75rem; color: var(--muted);">Prevents bank/government outbound-only helplines from being trusted inbound</div>
+            </div>
+            <input type="checkbox" id="chkProtectVault" checked onchange="savePolicy()" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Card 3: Pre-Compiled iOS CallKit Directory & Protected Institution Vault -->
+      <section class="card">
+        <h2>
+          <span>3. Compiled iOS CallKit Table (<code>CXCallDirectoryPhoneNumber</code> Ascending Int64)</span>
+        </h2>
+        <p class="sub">Add a bank or government helpline below to protect it from inbound CLI spoofing, and inspect the live CallKit table.</p>
+
+        <div class="form-grid" style="align-items: end;">
+          <div>
+            <label for="newEntityName">Institution / VIP Name</label>
+            <input id="newEntityName" type="text" placeholder="e.g. Wells Fargo Fraud Desk" />
+          </div>
+          <div>
+            <label for="newEntityNumber">E.164 Number</label>
+            <input id="newEntityNumber" type="text" placeholder="e.g. +1-800-869-3557" />
+          </div>
+          <div>
+            <button class="primary" style="width:100%;" onclick="addProtectedEntity()">+ Add to Protected Vault</button>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Sorted E.164 (Int64)</th>
+              <th>Rule Category</th>
+              <th>CallKit Action</th>
+              <th>Native iOS Incoming Call Banner Label</th>
+            </tr>
+          </thead>
+          <tbody id="callKitTableBody"></tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Built-in ⚙️ Setup Assistant Drawer -->
+  <div class="drawer-backdrop" id="setupBackdrop" onclick="if(event.target===this) toggleSetupDrawer(false)">
+    <div class="drawer">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size:1.15rem;">⚙️ Setup Assistant & Cloud Lookup</h2>
+        <button onclick="toggleSetupDrawer(false)">✕ Close</button>
+      </div>
+      <p style="font-size:0.83rem; color:var(--muted);">
+        CLI Spoof Shield works out of the box using the built-in <strong>Local Offline Heuristic & Prefix Database</strong>. To enable live carrier line-type queries (to detect freshly minted Non-Fixed VoIP numbers in real time), configure Twilio Lookup v2 or Numverify below.
+      </p>
+
+      <div>
+        <label for="cfgProvider">Line-Type Intelligence Provider</label>
+        <select id="cfgProvider">
+          <option value="offline">Local Offline Heuristic DB (Recommended Default — Zero Auth)</option>
+          <option value="twilio">Twilio Lookup v2 API (line_type_intelligence)</option>
+          <option value="numverify">Numverify Carrier Intelligence API</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="cfgTwilioSid">Twilio Account SID (Optional)</label>
+        <input id="cfgTwilioSid" type="text" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+      </div>
+      <div>
+        <label for="cfgTwilioToken">Twilio Auth Token (Optional)</label>
+        <input id="cfgTwilioToken" type="password" placeholder="••••••••••••••••••••••••••••••••" />
+      </div>
+
+      <div>
+        <label for="cfgNumverifyKey">Numverify API Access Key (Optional)</label>
+        <input id="cfgNumverifyKey" type="password" placeholder="••••••••••••••••••••••••••••••••" />
+      </div>
+
+      <div>
+        <label>Copyable iOS LiveCallerIDLookup (PIR / OHTTP) Endpoint URL</label>
+        <div class="code-box" id="pirUrlBox">http://localhost:4150/api/pir-lookup</div>
+      </div>
+
+      <button class="primary" onclick="saveCredentials()">💾 Save Setup & Activate</button>
+      <div id="setupSaveMsg" style="font-size:0.8rem; color:var(--success);"></div>
+    </div>
+  </div>
+
+  <script>
+    const presets = {
+      bankSpoof: {
+        rawNumber: '+1 (800) 935-9935',
+        attestation: 'C',
+        lineType: 'auto',
+        fromURI: 'sip:+18009359935@chase.com',
+        pAssertedIdentity: 'sip:+13025550199@wholesale-voip.io'
+      },
+      neighborSpoof: {
+        rawNumber: '+1 (415) 555-0199',
+        attestation: 'NONE',
+        lineType: 'nonFixedVoip',
+        fromURI: 'sip:+14155550199@spoof-dialer.net',
+        pAssertedIdentity: ''
+      },
+      burnerVoip: {
+        rawNumber: '+1 (302) 555-0199',
+        attestation: 'B',
+        lineType: 'nonFixedVoip',
+        fromURI: 'sip:+13025550199@sip.burner-trunk.org',
+        pAssertedIdentity: 'sip:+13025550199@sip.burner-trunk.org'
+      },
+      sipMismatch: {
+        rawNumber: '+1 (800) 374-9700',
+        attestation: 'FAILED',
+        lineType: 'nonFixedVoip',
+        fromURI: 'sip:+18003749700@citibank.com',
+        pAssertedIdentity: 'sip:+447099881122@offshore-gateway.co.uk'
+      },
+      verifiedLegit: {
+        rawNumber: '+1 (415) 555-0142',
+        attestation: 'A',
+        lineType: 'mobile',
+        fromURI: 'sip:+14155550142@ims.mnc410.mcc310.3gppnetwork.org',
+        pAssertedIdentity: 'sip:+14155550142@ims.mnc410.mcc310.3gppnetwork.org'
+      }
+    };
+
+    function loadPreset(key) {
+      const p = presets[key];
+      if (!p) return;
+      document.getElementById('inputNumber').value = p.rawNumber;
+      document.getElementById('inputAttestation').value = p.attestation;
+      document.getElementById('inputLineType').value = p.lineType;
+      document.getElementById('inputFromURI').value = p.fromURI;
+      document.getElementById('inputPAI').value = p.pAssertedIdentity;
+      runEvaluation();
+    }
+
+    async function fetchInitialState() {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+      document.getElementById('chkBlockVoip').checked = data.policy.blockNonFixedVoip;
+      document.getElementById('chkBlockStir').checked = data.policy.blockFailedStirShaken;
+      document.getElementById('chkNeighborShield').checked = data.policy.enableNeighborSpoofShield;
+      document.getElementById('chkProtectVault').checked = data.policy.protectOutboundOnlyInstitutions;
+      document.getElementById('ownNumberDisplay').textContent = data.policy.userOwnNumberE164;
+
+      document.getElementById('cfgProvider').value = data.credentials.provider || 'offline';
+      document.getElementById('cfgTwilioSid').value = data.credentials.twilioAccountSid || '';
+      document.getElementById('cfgTwilioToken').value = data.credentials.twilioAuthToken || '';
+      document.getElementById('cfgNumverifyKey').value = data.credentials.numverifyApiKey || '';
+      updateProviderBadge(data.credentials.provider);
+
+      renderCallKitTable(data.callKitDirectory || []);
+      runEvaluation();
+    }
+
+    function updateProviderBadge(provider) {
+      const badge = document.getElementById('providerBadge');
+      if (provider === 'twilio') badge.textContent = 'Mode: Twilio Lookup v2 + Local Fallback';
+      else if (provider === 'numverify') badge.textContent = 'Mode: Numverify API + Local Fallback';
+      else badge.textContent = 'Mode: Offline Heuristic DB (Zero-Auth)';
+    }
+
+    async function runEvaluation() {
+      const payload = {
+        rawNumber: document.getElementById('inputNumber').value,
+        attestation: document.getElementById('inputAttestation').value,
+        lineType: document.getElementById('inputLineType').value,
+        sipContext: {
+          fromURI: document.getElementById('inputFromURI').value.trim(),
+          pAssertedIdentity: document.getElementById('inputPAI').value.trim()
+        }
+      };
+
+      const res = await fetch('/api/evaluate-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const verdict = await res.json();
+      renderVerdict(verdict);
+    }
+
+    function renderVerdict(v) {
+      document.getElementById('simCallerNumber').textContent = '+' + v.callerE164;
+      document.getElementById('simCarrierSub').textContent = `${v.carrierName} • Line: ${v.lineType}`;
+      document.getElementById('simCallKitLabel').textContent = v.callKitLabel;
+      document.getElementById('simRiskScoreText').textContent = `${v.riskScore} / 100`;
+      document.getElementById('simAttestation').textContent = `Attestation: ${v.attestation}`;
+      document.getElementById('simLineType').textContent = v.lineType;
+      document.getElementById('simLookupSource').textContent = v.lookupSource;
+
+      const pill = document.getElementById('simStatusPill');
+      const bar = document.getElementById('simRiskBar');
+      const note = document.getElementById('simBlockedOverlayNote');
+      bar.style.width = `${v.riskScore}%`;
+
+      if (v.action === 'BLOCK') {
+        pill.className = 'call-status-pill status-block';
+        pill.textContent = '🛑 BLOCKED BY CALLKIT / PIR';
+        bar.style.background = '#ef4444';
+        note.style.display = 'block';
+        note.style.color = '#f87171';
+        note.textContent = 'Call terminated pre-ring via CXCallDirectoryProvider / LiveCallerIDLookup';
+      } else if (v.action === 'WARN_LABEL') {
+        pill.className = 'call-status-pill status-warn';
+        pill.textContent = '⚠️ SPOOF WARNING DISPLAYED';
+        bar.style.background = '#f59e0b';
+        note.style.display = 'block';
+        note.style.color = '#fbbf24';
+        note.textContent = 'Warning banner injected onto iOS lock screen via CallKit Identification';
+      } else {
+        pill.className = 'call-status-pill status-allow';
+        pill.textContent = '✅ VERIFIED SAFE CALL';
+        bar.style.background = '#10b981';
+        note.style.display = 'none';
+      }
+
+      const container = document.getElementById('signalsContainer');
+      container.innerHTML = v.signals.map(s => `
+        <div class="signal-item">
+          <div>
+            <div style="font-weight:700; color:#f8fafc;">${s.layer} — <code style="color:#38bdf8;">${s.code}</code></div>
+            <div style="color:var(--muted); font-size:0.8rem;">${s.explanation}</div>
+          </div>
+          <span class="signal-delta ${s.scoreDelta >= 0 ? 'delta-pos' : 'delta-neg'}">
+            ${s.scoreDelta >= 0 ? '+' + s.scoreDelta : s.scoreDelta} pts
+          </span>
+        </div>
+      `).join('');
+    }
+
+    async function savePolicy() {
+      const body = {
+        blockNonFixedVoip: document.getElementById('chkBlockVoip').checked,
+        blockFailedStirShaken: document.getElementById('chkBlockStir').checked,
+        enableNeighborSpoofShield: document.getElementById('chkNeighborShield').checked,
+        protectOutboundOnlyInstitutions: document.getElementById('chkProtectVault').checked
+      };
+      const res = await fetch('/api/policy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      renderCallKitTable(data.callKitDirectory || []);
+      runEvaluation();
+    }
+
+    function renderCallKitTable(entries) {
+      const tbody = document.getElementById('callKitTableBody');
+      tbody.innerHTML = entries.map(item => `
+        <tr>
+          <td style="font-family:monospace; font-weight:700; color:#38bdf8;">${item.e164}</td>
+          <td>${item.category}</td>
+          <td>
+            <span class="call-status-pill ${item.isBlocked ? 'status-block' : 'status-warn'}" style="margin:0; font-size:0.66rem;">
+              ${item.isBlocked ? 'BLOCK ENTRY' : 'ID BANNER'}
+            </span>
+          </td>
+          <td>${item.label}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function addProtectedEntity() {
+      const name = document.getElementById('newEntityName').value.trim();
+      const e164Number = document.getElementById('newEntityNumber').value.trim();
+      if (!name || !e164Number) return;
+      const res = await fetch('/api/protected-entities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, e164Number, category: 'Bank', inboundAllowed: false })
+      });
+      const data = await res.json();
+      if (data.callKitDirectory) {
+        renderCallKitTable(data.callKitDirectory);
+        document.getElementById('newEntityName').value = '';
+        document.getElementById('newEntityNumber').value = '';
+      }
+    }
+
+    function toggleSetupDrawer(open) {
+      const el = document.getElementById('setupBackdrop');
+      if (open) el.classList.add('open');
+      else el.classList.remove('open');
+    }
+
+    async function saveCredentials() {
+      const body = {
+        provider: document.getElementById('cfgProvider').value,
+        twilioAccountSid: document.getElementById('cfgTwilioSid').value.trim(),
+        twilioAuthToken: document.getElementById('cfgTwilioToken').value.trim(),
+        numverifyApiKey: document.getElementById('cfgNumverifyKey').value.trim()
+      };
+      const res = await fetch('/api/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      updateProviderBadge(data.credentials.provider);
+      document.getElementById('setupSaveMsg').textContent = '✅ Saved! Active lookup engine updated.';
+      setTimeout(() => {
+        document.getElementById('setupSaveMsg').textContent = '';
+        toggleSetupDrawer(false);
+        runEvaluation();
+      }, 900);
+    }
+
+    fetchInitialState();
+  </script>
+</body>
+</html>

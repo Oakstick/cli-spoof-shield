@@ -1,0 +1,13 @@
+{
+  "name": "cli-spoof-shield",
+  "version": "1.0.0",
+  "description": "Device-Side iOS CallKit, LiveCallerIDLookup (PIR), STIR/SHAKEN & Non-Fixed VoIP CLI Spoofing Defense Suite",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
